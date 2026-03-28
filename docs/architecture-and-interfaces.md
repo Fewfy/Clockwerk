@@ -7,6 +7,30 @@
 - 先支持仿真，再为真机保留扩展位
 - 先支持规则决策，再为学习型高层策略预留替换点
 - 安全层独立存在，不与普通决策逻辑混写
+- 在线链路以 `C++` 为主，仿真训练和离线工具保留 `Python`
+
+## 技术栈建议
+
+在线系统：
+
+- `C++17` 或 `C++20`
+- `CMake`
+- `ROS2`
+- `Unitree SDK2`
+- `yaml-cpp`
+- `gtest`
+
+仿真和训练：
+
+- `Python`
+- `Isaac Lab`
+- `PyTorch`
+- `pytest`
+
+这样拆分的目的：
+
+- 把性能敏感、时序敏感、部署敏感的模块放在 `C++`
+- 把训练、评估、实验工具保留在更高效的 `Python` 环境
 
 ## 推荐目录结构
 
@@ -16,62 +40,80 @@ clockwerk/
 ├── docs/
 │   ├── development-plan.md
 │   └── architecture-and-interfaces.md
+├── CMakeLists.txt
 ├── configs/
 │   ├── sim.yaml
 │   ├── agent.yaml
 │   ├── safety.yaml
 │   └── skills.yaml
-├── src/
+├── include/
 │   └── clockwerk/
-│       ├── __init__.py
-│       ├── app.py
-│       ├── runtime/
-│       │   ├── loop.py
-│       │   ├── scheduler.py
-│       │   └── context.py
 │       ├── core/
-│       │   ├── types.py
-│       │   ├── enums.py
-│       │   ├── events.py
-│       │   └── result.py
+│       │   ├── types.hpp
+│       │   ├── enums.hpp
+│       │   ├── events.hpp
+│       │   └── result.hpp
+│       ├── runtime/
+│       │   ├── loop.hpp
+│       │   ├── scheduler.hpp
+│       │   └── context.hpp
 │       ├── perception/
-│       │   ├── adapter.py
-│       │   ├── estimator.py
-│       │   └── fall_detector.py
+│       │   ├── adapter.hpp
+│       │   ├── estimator.hpp
+│       │   └── fall_detector.hpp
 │       ├── decision/
-│       │   ├── agent.py
-│       │   ├── state_machine.py
-│       │   ├── rules.py
-│       │   └── policy.py
+│       │   ├── agent.hpp
+│       │   ├── state_machine.hpp
+│       │   ├── rules.hpp
+│       │   └── policy.hpp
 │       ├── skills/
-│       │   ├── base.py
-│       │   ├── stand.py
-│       │   ├── move_to_heading.py
-│       │   ├── avoid_obstacle.py
-│       │   ├── recover.py
-│       │   └── stop.py
+│       │   ├── skill.hpp
+│       │   ├── stand_skill.hpp
+│       │   ├── move_to_heading_skill.hpp
+│       │   ├── avoid_obstacle_skill.hpp
+│       │   ├── recover_skill.hpp
+│       │   └── stop_skill.hpp
 │       ├── safety/
-│       │   ├── supervisor.py
-│       │   ├── checks.py
-│       │   └── limits.py
+│       │   ├── supervisor.hpp
+│       │   ├── checks.hpp
+│       │   └── limits.hpp
 │       ├── robot/
-│       │   ├── base.py
-│       │   ├── sim_adapter.py
-│       │   ├── ros2_adapter.py
-│       │   └── sdk_adapter.py
-│       ├── logging/
-│       │   ├── events.py
-│       │   ├── recorder.py
-│       │   └── dashboard.py
-│       └── testing/
-│           ├── scenarios.py
-│           ├── metrics.py
-│           └── replay.py
+│       │   ├── robot_adapter.hpp
+│       │   ├── ros2_adapter.hpp
+│       │   ├── sdk_adapter.hpp
+│       │   └── sim_bridge_adapter.hpp
+│       └── logging/
+│           ├── events.hpp
+│           ├── recorder.hpp
+│           └── dashboard.hpp
+├── src/
+│   ├── app.cpp
+│   ├── runtime/
+│   ├── perception/
+│   ├── decision/
+│   ├── skills/
+│   ├── safety/
+│   ├── robot/
+│   └── logging/
+├── tools/
+│   ├── train/
+│   │   ├── train_policy.py
+│   │   └── export_policy.py
+│   ├── sim/
+│   │   ├── launch_isaaclab.py
+│   │   └── replay_log.py
+│   └── analysis/
+│       ├── evaluate_runs.py
+│       └── plot_metrics.py
 └── tests/
-    ├── test_state_machine.py
-    ├── test_safety.py
-    ├── test_skills.py
-    └── test_robot_adapter.py
+    ├── cpp/
+    │   ├── test_state_machine.cpp
+    │   ├── test_safety.cpp
+    │   ├── test_skills.cpp
+    │   └── test_robot_adapter.cpp
+    └── python/
+        ├── test_training_pipeline.py
+        └── test_log_replay.py
 ```
 
 ## 每个目录的职责
@@ -89,6 +131,7 @@ clockwerk/
 
 - 配置项过多，含义重复
 - 配置命名不一致，后期难维护
+- `C++` 和 `Python` 读取同一份配置时字段定义不一致
 
 ### `runtime/`
 
@@ -103,6 +146,7 @@ clockwerk/
 
 - 主循环里塞太多业务逻辑
 - 不同模块执行频率没有被清晰管理
+- `ROS2 callback` 和主控制循环之间的线程关系不清楚
 
 ### `core/`
 
@@ -117,6 +161,7 @@ clockwerk/
 
 - 类型设计过于复杂
 - 各模块绕过类型直接传原始对象
+- 内部结构体和 `ROS2 message` 重复定义
 
 ### `perception/`
 
@@ -145,6 +190,7 @@ clockwerk/
 
 - 状态机和策略逻辑混写
 - 规则版和学习版接口不统一
+- 在线 `C++` 策略和离线 `Python` 策略输入语义不一致
 
 ### `skills/`
 
@@ -187,6 +233,7 @@ clockwerk/
 
 - 不同平台的控制语义并不完全一致
 - 时间戳、坐标系、控制频率容易混乱
+- `ROS2`、SDK 和仿真桥接层的异常处理风格不一致
 
 ### `logging/`
 
@@ -215,27 +262,31 @@ clockwerk/
 
 - 场景和指标定义不稳定
 - 测试不能覆盖异常路径
+- `C++` 单测和 `Python` 仿真回归测试之间缺少共享用例
 
 ## 核心数据结构建议
 
-下面的接口定义偏 Python 风格，但重点是职责，不是语法细节。
+下面的接口定义偏 `C++` 风格，但重点是职责，不是语法细节。
 
 ### `RobotObservation`
 
-```python
-from dataclasses import dataclass
+```cpp
+struct Vec3 {
+    double x;
+    double y;
+    double z;
+};
 
-
-@dataclass
-class RobotObservation:
-    timestamp: float
-    linear_velocity: tuple[float, float, float]
-    angular_velocity: tuple[float, float, float]
-    body_rpy: tuple[float, float, float]
-    obstacle_distance: float | None
-    is_fallen: bool
-    command_alive: bool
-    current_skill: str | None
+struct RobotObservation {
+    double timestamp_sec;
+    Vec3 linear_velocity;
+    Vec3 angular_velocity;
+    Vec3 body_rpy;
+    std::optional<double> obstacle_distance;
+    bool is_fallen;
+    bool command_alive;
+    std::optional<std::string> current_skill;
+};
 ```
 
 目的：
@@ -250,15 +301,17 @@ class RobotObservation:
 
 ### `NavigationGoal`
 
-```python
-from dataclasses import dataclass
+```cpp
+struct Vec2 {
+    double x;
+    double y;
+};
 
-
-@dataclass
-class NavigationGoal:
-    target_heading: float | None
-    target_position: tuple[float, float] | None
-    max_speed: float
+struct NavigationGoal {
+    std::optional<double> target_heading;
+    std::optional<Vec2> target_position;
+    double max_speed;
+};
 ```
 
 目的：
@@ -273,16 +326,13 @@ class NavigationGoal:
 
 ### `DecisionContext`
 
-```python
-from dataclasses import dataclass
-
-
-@dataclass
-class DecisionContext:
-    observation: RobotObservation
-    goal: NavigationGoal | None
-    active_state: str
-    active_skill: str | None
+```cpp
+struct DecisionContext {
+    RobotObservation observation;
+    std::optional<NavigationGoal> goal;
+    std::string active_state;
+    std::optional<std::string> active_skill;
+};
 ```
 
 目的：
@@ -297,15 +347,12 @@ class DecisionContext:
 
 ### `DecisionOutput`
 
-```python
-from dataclasses import dataclass
-
-
-@dataclass
-class DecisionOutput:
-    next_state: str
-    requested_skill: str
-    reason: str
+```cpp
+struct DecisionOutput {
+    std::string next_state;
+    std::string requested_skill;
+    std::string reason;
+};
 ```
 
 目的：
@@ -320,16 +367,13 @@ class DecisionOutput:
 
 ### `SafetyEvent`
 
-```python
-from dataclasses import dataclass
-
-
-@dataclass
-class SafetyEvent:
-    triggered: bool
-    level: str
-    code: str
-    message: str
+```cpp
+struct SafetyEvent {
+    bool triggered;
+    std::string level;
+    std::string code;
+    std::string message;
+};
 ```
 
 目的：
@@ -346,18 +390,18 @@ class SafetyEvent:
 
 ### `RobotAdapter`
 
-```python
-from typing import Protocol
-
-
-class RobotAdapter(Protocol):
-    def connect(self) -> None: ...
-    def disconnect(self) -> None: ...
-    def get_observation(self) -> RobotObservation: ...
-    def send_velocity_command(self, vx: float, vy: float, wz: float) -> None: ...
-    def send_skill_command(self, skill_name: str, params: dict | None = None) -> None: ...
-    def emergency_stop(self) -> None: ...
-    def reset(self) -> None: ...
+```cpp
+class RobotAdapter {
+public:
+    virtual ~RobotAdapter() = default;
+    virtual void Connect() = 0;
+    virtual void Disconnect() = 0;
+    virtual RobotObservation GetObservation() = 0;
+    virtual void SendVelocityCommand(double vx, double vy, double wz) = 0;
+    virtual void SendSkillCommand(const std::string& skill_name) = 0;
+    virtual void EmergencyStop() = 0;
+    virtual void Reset() = 0;
+};
 ```
 
 目的：
@@ -372,12 +416,12 @@ class RobotAdapter(Protocol):
 
 ### `PerceptionAdapter`
 
-```python
-from typing import Protocol
-
-
-class PerceptionAdapter(Protocol):
-    def update(self, raw_observation: RobotObservation) -> RobotObservation: ...
+```cpp
+class PerceptionAdapter {
+public:
+    virtual ~PerceptionAdapter() = default;
+    virtual RobotObservation Update(const RobotObservation& raw_observation) = 0;
+};
 ```
 
 目的：
@@ -391,12 +435,12 @@ class PerceptionAdapter(Protocol):
 
 ### `StateEstimator`
 
-```python
-from typing import Protocol
-
-
-class StateEstimator(Protocol):
-    def estimate(self, observation: RobotObservation) -> RobotObservation: ...
+```cpp
+class StateEstimator {
+public:
+    virtual ~StateEstimator() = default;
+    virtual RobotObservation Estimate(const RobotObservation& observation) = 0;
+};
 ```
 
 目的：
@@ -409,12 +453,12 @@ class StateEstimator(Protocol):
 
 ### `DecisionAgent`
 
-```python
-from typing import Protocol
-
-
-class DecisionAgent(Protocol):
-    def decide(self, context: DecisionContext) -> DecisionOutput: ...
+```cpp
+class DecisionAgent {
+public:
+    virtual ~DecisionAgent() = default;
+    virtual DecisionOutput Decide(const DecisionContext& context) = 0;
+};
 ```
 
 目的：
@@ -427,18 +471,17 @@ class DecisionAgent(Protocol):
 
 ### `Skill`
 
-```python
-from typing import Protocol
-
-
-class Skill(Protocol):
-    name: str
-
-    def can_enter(self, context: DecisionContext) -> bool: ...
-    def on_enter(self, context: DecisionContext) -> None: ...
-    def step(self, context: DecisionContext, robot: RobotAdapter) -> None: ...
-    def should_exit(self, context: DecisionContext) -> bool: ...
-    def on_exit(self, context: DecisionContext) -> None: ...
+```cpp
+class Skill {
+public:
+    virtual ~Skill() = default;
+    virtual std::string Name() const = 0;
+    virtual bool CanEnter(const DecisionContext& context) const = 0;
+    virtual void OnEnter(const DecisionContext& context) = 0;
+    virtual void Step(const DecisionContext& context, RobotAdapter& robot) = 0;
+    virtual bool ShouldExit(const DecisionContext& context) const = 0;
+    virtual void OnExit(const DecisionContext& context) = 0;
+};
 ```
 
 目的：
@@ -453,12 +496,12 @@ class Skill(Protocol):
 
 ### `SafetySupervisor`
 
-```python
-from typing import Protocol
-
-
-class SafetySupervisor(Protocol):
-    def evaluate(self, context: DecisionContext) -> SafetyEvent | None: ...
+```cpp
+class SafetySupervisor {
+public:
+    virtual ~SafetySupervisor() = default;
+    virtual std::optional<SafetyEvent> Evaluate(const DecisionContext& context) = 0;
+};
 ```
 
 目的：
@@ -496,17 +539,20 @@ class SafetySupervisor(Protocol):
 
 如果要快速起步，建议先只实现这些文件：
 
-- `src/clockwerk/app.py`
-- `src/clockwerk/core/types.py`
-- `src/clockwerk/decision/state_machine.py`
-- `src/clockwerk/skills/base.py`
-- `src/clockwerk/skills/stand.py`
-- `src/clockwerk/skills/move_to_heading.py`
-- `src/clockwerk/skills/recover.py`
-- `src/clockwerk/skills/stop.py`
-- `src/clockwerk/safety/supervisor.py`
-- `src/clockwerk/robot/base.py`
-- `src/clockwerk/robot/sim_adapter.py`
+- `CMakeLists.txt`
+- `include/clockwerk/core/types.hpp`
+- `include/clockwerk/decision/state_machine.hpp`
+- `include/clockwerk/skills/skill.hpp`
+- `include/clockwerk/safety/supervisor.hpp`
+- `include/clockwerk/robot/robot_adapter.hpp`
+- `src/app.cpp`
+- `src/decision/state_machine.cpp`
+- `src/skills/stand_skill.cpp`
+- `src/skills/move_to_heading_skill.cpp`
+- `src/skills/recover_skill.cpp`
+- `src/skills/stop_skill.cpp`
+- `src/safety/supervisor.cpp`
+- `src/robot/sim_bridge_adapter.cpp`
 
 目的：
 
@@ -520,11 +566,11 @@ class SafetySupervisor(Protocol):
 
 ## 后续扩展方向
 
-- 在 `decision/policy.py` 中接入学习型高层策略
-- 在 `robot/ros2_adapter.py` 中接入 ROS2 topic 和 service
-- 在 `robot/sdk_adapter.py` 中对接 Unitree SDK2
-- 在 `testing/replay.py` 中加入失败回放
-- 在 `logging/dashboard.py` 中加入在线状态面板
+- 在 `decision/policy.hpp` 和 `src/decision/policy.cpp` 中接入更复杂的高层策略
+- 在 `robot/ros2_adapter.hpp` 和 `src/robot/ros2_adapter.cpp` 中接入 `ROS2 topic` 和 `service`
+- 在 `robot/sdk_adapter.hpp` 和 `src/robot/sdk_adapter.cpp` 中对接 `Unitree SDK2`
+- 在 `tools/sim/replay_log.py` 中加入失败回放
+- 在 `logging/dashboard.hpp` 和 `src/logging/dashboard.cpp` 中加入在线状态面板
 
 目的：
 

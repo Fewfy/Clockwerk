@@ -6,3 +6,8 @@
 
 - [开发计划](/home/yaof/dev/Clockwerk/docs/development-plan.md)
 - [目录结构与接口定义](/home/yaof/dev/Clockwerk/docs/architecture-and-interfaces.md)
+
+推荐技术路线：
+
+- 在线决策与机器人接入使用 `C++`
+- 仿真训练、数据分析和实验工具使用 `Python`
