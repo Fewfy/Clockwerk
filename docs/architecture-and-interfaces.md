@@ -32,6 +32,99 @@
 - 把性能敏感、时序敏感、部署敏感的模块放在 `C++`
 - 把训练、评估、实验工具保留在更高效的 `Python` 环境
 
+## 系统架构图
+
+下面这张图固定第二步要定义的核心模块、数据流和调用方向。
+
+```mermaid
+flowchart LR
+    Mission[Mission Input\n目标方向或目标点]
+    Sensors[Raw Sensors\nIMU 速度 障碍距离 跌倒状态]
+
+    PA[Perception Adapter]
+    SE[State Estimator]
+    DA[Decision Agent]
+    SC[Skill Controller]
+    SS[Safety Supervisor]
+    RA[Robot Adapter]
+    Robot[Robot or Simulator]
+
+    Mission --> DA
+    Sensors --> PA
+    PA --> SE
+    SE -->|结构化观测| DA
+    DA -->|高层状态与技能意图| SC
+    SC -->|运动命令或技能命令| SS
+    SS -->|已批准命令| RA
+    RA --> Robot
+    Robot -->|传感器与执行反馈| Sensors
+    SE -->|姿态 风险 跌倒信息| SS
+    SS -.->|急停或覆盖| SC
+    SS -.->|急停| RA
+```
+
+## 数据流与调用方向
+
+主链路按以下顺序工作：
+
+1. `Perception Adapter` 接收原始传感器输入，并做统一格式化。
+2. `State Estimator` 把原始观测整理成高层可消费的结构化状态。
+3. `Decision Agent` 基于任务目标和结构化状态决定当前高层状态与技能意图。
+4. `Skill Controller` 把技能意图转换成可执行的低层运动命令或技能命令。
+5. `Safety Supervisor` 在命令真正下发前执行独立检查，并在必要时覆盖普通决策。
+6. `Robot Adapter` 屏蔽仿真或真机平台差异，把命令送到机器人执行。
+
+方向约束如下：
+
+- 原始观测不直接进入 `Decision Agent`
+- `Decision Agent` 不直接绕过 `Skill Controller` 控制机器人
+- `Safety Supervisor` 必须位于命令下发链路上，而不是只做旁路监控
+- `Robot Adapter` 只负责平台适配，不承载高层决策语义
+
+## 模块职责摘要
+
+### `Perception Adapter`
+
+职责：
+
+- 对接 IMU、速度、障碍距离、跌倒状态等底层输入
+- 屏蔽传感器来源差异和消息格式差异
+
+### `State Estimator`
+
+职责：
+
+- 生成高层决策所需的结构化观测
+- 输出姿态稳定性、运动状态和风险相关摘要
+
+### `Decision Agent`
+
+职责：
+
+- 在 `IDLE`、`NAVIGATE`、`RECOVER`、`EMERGENCY_STOP` 之间做高层状态选择
+- 生成技能层可执行的动作意图
+
+### `Skill Controller`
+
+职责：
+
+- 把高层状态和动作意图映射成可执行技能
+- 管理技能进入、运行、退出和超时
+
+### `Safety Supervisor`
+
+职责：
+
+- 独立检查跌倒、姿态越界、障碍风险、命令超时等安全条件
+- 在必要时触发急停或覆盖普通命令
+
+### `Robot Adapter`
+
+职责：
+
+- 统一仿真环境与真机接口
+- 提供命令下发和观测回读的单一适配层
+
 ## 推荐目录结构
 
 ```text
