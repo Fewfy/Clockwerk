@@ -13,6 +13,19 @@
 - 在线决策与机器人接入使用 `C++`
 - 仿真训练、数据分析和实验工具使用 `Python`
 
+常用脚本：
+
+- `scripts/build.sh`
+  配置并编译当前 `C++` 工程
+- `scripts/test_cpp.sh`
+  编译并执行 `C++` 测试
+- `scripts/test_python.sh`
+  执行 `Python` 测试
+- `scripts/test_all.sh`
+  顺序执行 `C++` 与 `Python` 测试
+- `scripts/run_mock_sim.sh`
+  使用 `configs/sim.yaml` 启动当前 mock 仿真链路
+
 参考与借鉴项目：
 
 - `unitreerobotics/unitree_rl_lab`
