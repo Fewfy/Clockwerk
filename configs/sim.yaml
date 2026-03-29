@@ -1,0 +1,11 @@
+backend: mock
+control_dt: 0.1
+max_steps: 80
+obstacle_positions:
+  - 2.0
+obstacle_threshold: 0.35
+fall_pitch_threshold: 1.0
+fall_reset_pitch: 0.0
+default_goal_heading: 0.0
+default_goal_speed: 0.4
+log_path: /tmp/clockwerk_mock_sim.jsonl
